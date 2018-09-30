@@ -4,7 +4,6 @@ import { PermissionsAndroid, StyleSheet, View } from 'react-native';
 import uuidv4 from 'uuid/v4';
 import Permissions from '../utilities/Permissions';
 import Location from '../utilities/Location';
-import NetSocket from '../utilities/NetSocket';
 import WafoWebSocket from '../utilities/WebSocket';
 import ControlMenu from './ControlMenu';
 import Mapa from './Mapa';
@@ -18,7 +17,7 @@ const initialState = {
   },
   socket: {
     status: false,
-    host: '192.168.1.145',
+    host: '192.168.0.14',
     port: 9000,
     room: 'abc123',
     uuid: '',
@@ -30,7 +29,6 @@ class GroupBroadcast extends Component {
     super();
     this.initiateLocation = this.initiateLocation.bind(this);
     this.toggleLocation = this.toggleLocation.bind(this);
-    this.socketConnectionToggle = this.socketConnectionToggle.bind(this);
     this.websocketConnectionToggle = this.websocketConnectionToggle.bind(this);
     this.updateSettings = this.updateSettings.bind(this);
 
@@ -70,7 +68,7 @@ class GroupBroadcast extends Component {
       // enviando posicion
       if (socket.status) {
         const msg = { type: 'position', room, uuid, position: { latitude, longitude, timestamp } };
-        this.socket.socketWrite(JSON.stringify(msg));
+        this.socket.websocketWrite(JSON.stringify(msg));
       }
     }
 
@@ -102,61 +100,8 @@ class GroupBroadcast extends Component {
     }
   }
 
-  async socketConnectionToggle() {
-    const { socket, socket: { status, host, port, room }, position } = this.state;
-
-    if (!this.socket) {
-      this.socket = new NetSocket(host, port);
-    }
-
-    if (status) {
-      this.socket.socketDisconnect();
-      this.socket = undefined;
-    } else {
-      try {
-        await this.socket.openSocket(onData, onError.bind(this), onClose.bind(this));
-        // sending hello to server
-        const uuid = uuidv4();
-        const helloMsg = { type: 'client', room, uuid };
-        this.socket.socketWrite(JSON.stringify(helloMsg));
-        // sending position to server
-        const msg = {
-          type: 'position',
-          room,
-          uuid,
-          position: {
-            latitude: position.latitude,
-            longitude: position.longitude,
-            timestamp: position.timestamp,
-          },
-        };
-        this.socket.socketWrite(JSON.stringify(msg));
-        // updating state.
-        this.setState({ socket: { ...socket, status: true, uuid } });
-      } catch (err) {
-        console.error(err);
-        this.socket = undefined;
-      }
-    }
-
-    function onData(data) {
-      // const dataObj = JSON.parse(data);
-      console.log(`Recibi: ${data}`);
-    }
-
-    function onError(err) {
-      console.error(err);
-      // this.setState({ socket: { ...socket, status: false } });
-    }
-
-    function onClose() {
-      console.log('Socket cerrado');
-      this.setState({ socket: { ...socket, status: false } });
-    }
-  }
-
   websocketConnectionToggle() {
-    const { socket: { status, host, port } } = this.state;
+    const { socket, socket: { status, host, port, room }, position } = this.state;
 
     if (!this.socket) {
       this.socket = new WafoWebSocket(host, port);
@@ -166,19 +111,44 @@ class GroupBroadcast extends Component {
       this.socket.websocketDisconnect();
       this.socket = undefined;
     } else {
-      this.socket.openWebsocket(onOpen.bind(this), onMessage, onError, onClose);
+      this.socket.openWebsocket(onOpen.bind(this), onMessage, onError, onClose.bind(this));
     }
 
     function onOpen() {
       console.log('Connection open');
-      this.socket.websocketWrite('ayylmao diria el gaytis');
+      // sending hello to server
+      const uuid = uuidv4();
+      const helloMsg = { type: 'client', room, uuid };
+      this.socket.websocketWrite(JSON.stringify(helloMsg));
+      // sending position to server
+      const msg = {
+        type: 'position',
+        room,
+        uuid,
+        position: {
+          latitude: position.latitude,
+          longitude: position.longitude,
+          timestamp: position.timestamp,
+        },
+      };
+      this.socket.websocketWrite(JSON.stringify(msg));
+      // updating state
+      this.setState({ socket: { ...socket, status: true, uuid } });
     }
 
-    function onMessage(data) { console.log(data); }
+    function onMessage(data) {
+      console.log(`Recibi: ${data}`);
+    }
 
-    function onError(err) { }
+    function onError(err) {
+      console.error(err);
+      console.log(err.message);
+    }
 
-    function onClose(reason) { }
+    function onClose(event) {
+      console.log(event.code, event.reason);
+      this.setState({ socket: { ...socket, status: false } });
+    }
   }
 
   updateSettings(values) {

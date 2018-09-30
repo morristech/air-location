@@ -5,7 +5,7 @@ class WafoWebSocket {
     this._socket = undefined;
   }
 
-  openWebsocket(onOpen = () => { }, onMessage = () => { }, onError = () => { }, onClose = () => { }) {
+  openWebsocket(onOpen = f => f, onMessage = f => f, onError = f => f, onClose = f => f) {
     this._socket = new WebSocket(`ws://${this._host}:${this._port}`);
 
     this._socket.onopen = onOpen;
